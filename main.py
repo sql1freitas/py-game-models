@@ -1,8 +1,7 @@
 import json
 from pathlib import Path
-from db.models import Player, Race, Skill, Guild
 from django.db import transaction
-
+from db.models import Player, Race, Skill, Guild
 
 def main():
     file_path = Path(__file__).resolve().parent / "players.json"
@@ -12,21 +11,27 @@ def main():
 
     for player_name, details in data.items():
         with transaction.atomic():
-            skill_objs = []
-            for skill_data in details["race"]["skills"]:
-                skill, _ = Skill.objects.get_or_create(
-                    name=skill_data["name"],
-                    defaults={"bonus": skill_data["bonus"], "race_id": None}
-                )
-                skill_objs.append(skill)
-
+            
             race, _ = Race.objects.get_or_create(
                 name=details["race"]["name"],
                 defaults={"description": details["race"]["description"]}
             )
-            if race.skills.count() == 0:
-                race.skills.set(skill_objs)
 
+            
+            for skill_data in details["race"]["skills"]:
+                skill, created = Skill.objects.get_or_create(
+                    name=skill_data["name"],
+                    defaults={
+                        "bonus": skill_data["bonus"],
+                        "race": race
+                    }
+                )
+                
+                if not created and skill.race != race:
+                    skill.race = race
+                    skill.save()
+
+            
             guild_data = details.get("guild")
             guild = None
             if guild_data:
@@ -35,16 +40,13 @@ def main():
                     defaults={"description": guild_data["description"]}
                 )
 
+            
             Player.objects.get_or_create(
-                nickname=player_name,
                 email=details["email"],
                 defaults={
+                    "name": player_name,
                     "bio": details["bio"],
                     "race": race,
-                    "guild": guild,
+                    "guild": guild
                 }
             )
-
-
-if __name__ == "__main__":
-    main()
